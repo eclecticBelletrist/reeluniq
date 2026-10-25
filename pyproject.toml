@@ -6,6 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "reeluniq"
 version = "1.0.0"
 description = "Makes distinct variants of your own videos for several accounts"
+readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 authors = [{name = "eclecticBelletrist"}]
