@@ -95,7 +95,7 @@ SSCD (`sscd_disc_mixup`, the open copy-detection model) compares frames sampled 
     pytest -m unit           # no external programs
     pytest -m integration    # needs ffmpeg and ffprobe
 
-44 tests in two groups: unit (the operator path, the page and its PIN mode, the job queue, the command line) and integration (every mode on a synthetic clip, `meta` output, the hot folder, the HDR round trip). CI runs both on Linux, Windows and macOS.
+45 tests in two groups: unit (the operator path, the page and its PIN mode, the job queue, the command line) and integration (every mode on a synthetic clip, `meta` output, the hot folder, the HDR round trip). CI runs both on Linux, Windows and macOS.
 
 ## Design decisions and known limitations
 
