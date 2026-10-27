@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "reeluniq"
+version = "1.0.0"
+description = "Makes distinct variants of your own videos for several accounts"
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{name = "eclecticBelletrist"}]
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.24", "opencv-python-headless>=4.8"]
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[project.urls]
+Homepage = "https://github.com/eclecticBelletrist/reeluniq"
+
+[project.scripts]
+reeluniq = "reeluniq.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "unit: no external programs needed",
+    "integration: needs ffmpeg and ffprobe",
+]
