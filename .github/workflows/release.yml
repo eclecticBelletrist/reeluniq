@@ -1,0 +1,149 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: pip install -e '.[test]'
+      - run: pytest -q
+      - name: Tag matches the package version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          v=$(python -c "import tomllib;print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          test "v$v" = "$GITHUB_REF_NAME" || { echo "tag $GITHUB_REF_NAME does not match version $v"; exit 1; }
+
+  build:
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: windows-latest, name: windows-x64, ffmpeg: win}
+          - {os: macos-14, name: macos-apple-silicon, ffmpeg: arm64}
+          - {os: macos-15-intel, name: macos-intel, ffmpeg: amd64}
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install . pyinstaller
+      - name: FFmpeg
+        run: |
+          mkdir vendor
+          check_sha() { python -c "import hashlib,sys;sys.exit(0 if hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest()==sys.argv[2] else 'checksum mismatch: '+sys.argv[1])" "$1" "$2"; }
+          if [ "${{ matrix.ffmpeg }}" = win ]; then
+            curl -fsSL -o ff.zip https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-26-14-25/ffmpeg-n8.1.3-24-g92611900bb-win64-gpl-8.1.zip
+            check_sha ff.zip bf01c986f3f9d25ba316146a5ad37369a23f166bbe2ed002c1ec8a9b2f65183e
+            python -m zipfile -e ff.zip ff
+            cp ff/*/bin/ffmpeg.exe ff/*/bin/ffprobe.exe vendor/
+          else
+            if [ "${{ matrix.ffmpeg }}" = arm64 ]; then
+              base=https://ffmpeg.martin-riedl.de/download/macos/arm64/1789931890_9.0.2
+              sums="c8ed4c4e6978a03c485edbfe4e0a5dc2380f8a30bba5150531b31b094492d924 fcbe839537485eaee7a7a8bc5cbc0f90d53617e80943e8a5b2e31cb851197ea6"
+            else
+              base=https://ffmpeg.martin-riedl.de/download/macos/amd64/1789931006_9.0.2
+              sums="7c6b4125b191cbf773832dc51f424cf2b6bb7da43007d1e066f95909e47cacd4 2322438ed2f6319a691291b247d09c69dcaa3a982460d1f269a7e1af335cfdfd"
+            fi
+            set -- $sums
+            curl -fsSL -A 'Mozilla/5.0' -o ffmpeg.zip $base/ffmpeg.zip && check_sha ffmpeg.zip $1
+            curl -fsSL -A 'Mozilla/5.0' -o ffprobe.zip $base/ffprobe.zip && check_sha ffprobe.zip $2
+            for t in ffmpeg ffprobe; do unzip -o $t.zip -d vendor; done
+            chmod +x vendor/ffmpeg vendor/ffprobe
+          fi
+          vendor/ffmpeg -hide_banner -version | head -1
+          vendor/ffmpeg -hide_banner -encoders | grep -q libx264
+          vendor/ffmpeg -hide_banner -encoders | grep -q libx265
+          vendor/ffmpeg -hide_banner -filters | grep -q zscale
+      - name: Build
+        run: |
+          icon=""
+          if [ "${{ matrix.ffmpeg }}" = win ]; then icon="--icon packaging/reeluniq.ico"; fi
+          pyinstaller --noconfirm --onedir --console --name reeluniq $icon packaging/launcher.py
+          cp vendor/ffmpeg* vendor/ffprobe* dist/reeluniq/
+          cp LICENSE NOTICE packaging/THIRD-PARTY.txt dist/reeluniq/
+          mkdir dist/reeluniq/licenses
+          cp packaging/licenses/GPL-3.0.txt dist/reeluniq/licenses/
+          python - <<'PY'
+          import importlib.metadata as md, pathlib, shutil, sys
+          guide = "windows" if sys.platform == "win32" else "mac"
+          text = pathlib.Path(f"packaging/READ-ME-{guide}.txt").read_text(encoding="utf-8")
+          pathlib.Path("dist/reeluniq/\u0427\u0418\u0422\u0410\u0419-\u041c\u0415\u041d\u042f.txt").write_text(text.replace("\n", "\r\n") if guide == "windows" else text, encoding="utf-8-sig" if guide == "windows" else "utf-8", newline="")
+          dst = pathlib.Path("dist/reeluniq/licenses")
+          for pkg in ("numpy", "opencv-python-headless", "pyinstaller"):
+              d = md.distribution(pkg)
+              for f in d.files or []:
+                  if any(k in f.name.lower() for k in ("license", "notice", "copying")):
+                      shutil.copy(d.locate_file(f), dst / f"{pkg}-{f.name}")
+          PY
+      - name: Smoke test
+        run: |
+          cd "$RUNNER_TEMP"
+          "$GITHUB_WORKSPACE/dist/reeluniq/ffmpeg" -v error -y -f lavfi -i testsrc2=size=640x360:rate=24:duration=3 \
+            -f lavfi -i sine=frequency=440:duration=3 -c:v libx264 -pix_fmt yuv420p -c:a aac clip.mp4
+          for m in light dust operator meta; do
+            "$GITHUB_WORKSPACE/dist/reeluniq/reeluniq" make clip.mp4 -m $m -n 1 --out "out_$m"
+            ls out_$m/*.mp4
+          done
+          python - <<'PY'
+          import os, subprocess, sys, time, urllib.request
+          exe = os.path.join(os.environ["GITHUB_WORKSPACE"], "dist", "reeluniq", "reeluniq" + (".exe" if os.name == "nt" else ""))
+          p = subprocess.Popen([exe, "app", "--no-browser", "--port", "8799"])
+          try:
+              for _ in range(30):
+                  try:
+                      if b"reeluniq" in urllib.request.urlopen("http://127.0.0.1:8799/", timeout=2).read():
+                          break
+                  except OSError:
+                      time.sleep(1)
+              else:
+                  sys.exit("the web page did not come up")
+          finally:
+              p.terminate()
+              p.wait(timeout=30)
+          PY
+      - name: Package
+        run: |
+          mv dist/reeluniq dist/reeluniq-${{ matrix.name }}
+          cd dist
+          if [ "${{ matrix.ffmpeg }}" = win ]; then
+            python -m zipfile -c reeluniq-${{ matrix.name }}.zip reeluniq-${{ matrix.name }}
+          else
+            tar -czf reeluniq-${{ matrix.name }}.tar.gz reeluniq-${{ matrix.name }}
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: reeluniq-${{ matrix.name }}
+          path: |
+            dist/*.zip
+            dist/*.tar.gz
+
+  publish:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: assets
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: assets/*
+          generate_release_notes: true
