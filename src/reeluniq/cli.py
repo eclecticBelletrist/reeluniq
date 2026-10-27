@@ -1,4 +1,4 @@
-"""Command line: `reeluniq make VIDEO`."""
+"""Command line: `reeluniq make VIDEO`, `reeluniq watch FOLDER`, `reeluniq app`."""
 
 from __future__ import annotations
 
@@ -33,6 +33,22 @@ def cmd_make(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_watch(args: argparse.Namespace) -> int:
+    from .watch import watch
+
+    try:
+        watch(Path(args.folder), args.count, args.mode, once=args.once)
+    except KeyboardInterrupt:
+        print("stopped")
+    return 0
+
+
+def cmd_app(args: argparse.Namespace) -> int:
+    from .serve import serve
+
+    return serve(args.host, args.port, args.pin, args.count, args.mode, open_browser=not args.no_browser)
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="reeluniq", description="Distinct variants of your own videos.\n\n" + "\n".join(f"  {k:9s}{v}" for k, v in MODE_HELP.items()),
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -44,6 +60,20 @@ def main(argv: list[str] | None = None) -> int:
     m.add_argument("--seed", type=int, default=1)
     m.add_argument("--out", help="output folder (default: next to the source)")
     m.set_defaults(fn=cmd_make)
+    w = sub.add_parser("watch", help="hot folder: drop a video in, variants appear in FOLDER/variants/<file name>/")
+    w.add_argument("folder")
+    w.add_argument("-m", "--mode", choices=MODES, default="light")
+    w.add_argument("-n", "--count", type=positive, default=3)
+    w.add_argument("--once", action="store_true", help="process the files already there and exit")
+    w.set_defaults(fn=cmd_watch)
+    a = sub.add_parser("app", help="local web page: drop a video, download the variants")
+    a.add_argument("--host", default="127.0.0.1", help="use 0.0.0.0 to reach it from a phone on the same network (a PIN is then required)")
+    a.add_argument("--port", type=int, default=8765)
+    a.add_argument("--pin", help="PIN for access from other machines (default: random, printed at start); unused on localhost")
+    a.add_argument("-m", "--mode", choices=MODES, default="light")
+    a.add_argument("-n", "--count", type=positive, default=3)
+    a.add_argument("--no-browser", action="store_true")
+    a.set_defaults(fn=cmd_app)
     args = ap.parse_args(argv)
     for stream in (sys.stdout, sys.stderr):      # a Windows console in a legacy code page must not die on a file name
         if hasattr(stream, "reconfigure"):
