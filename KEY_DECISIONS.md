@@ -10,6 +10,7 @@ Each entry records what was decided, why, and what was rejected. Entry numbers a
 | 4 | `meta` copies the streams and proves they are unchanged |
 | 5 | The page is a standard-library server bound to loopback |
 | 6 | Unsigned builds, with the console window kept |
+| 7 | Settings live in a `NAME=value` file and in `REELUNIQ_*` variables |
 
 ---
 
@@ -76,3 +77,17 @@ Each entry records what was decided, why, and what was rejected. Entry numbers a
 - The console window is the program (it hosts the page). Closing it quits, and the window says so.
 
 **Rejected:** hiding the window (the program would run invisibly, with no way to quit).
+
+## Decision 7: Settings live in a `NAME=value` file and in `REELUNIQ_*` variables
+
+**Decision:** language, mode, number of variants, results folder, host, port, PIN and browser opening can be set in `reeluniq.env` (next to the program in the release archives) or in variables of the same names. The order is flag, variable, file, default. The file holds `REELUNIQ_NAME=value` lines and `#` comments.
+
+**Rationale:**
+- The people who start the program by double-click do not set environment variables; a text file next to the program they can open in Notepad.
+- One set of names for both the file and the variables, so there is one table to document and one parser to test.
+- Python 3.10 is supported and has no TOML reader; this format needs a short parser and no dependency.
+- An unknown line stops the program with the file and line number, a bad value with the setting's name. Silently ignoring a misspelled `REELUNIQ_LNAG` would leave the person wondering why nothing changed.
+
+**Cost:** no sections and no lists; the format cannot grow into nested settings without being replaced. `REELUNIQ_FFMPEG` and `REELUNIQ_FFPROBE` stay variables only, since they are read when the program starts, before the file.
+
+**Rejected:** TOML (`tomllib` needs Python 3.11, so either a dependency or a second parser); JSON (quotes and escaped backslashes in Windows paths for someone using Notepad); variables only (not usable by a double-click user).

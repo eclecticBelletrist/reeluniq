@@ -24,6 +24,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
 from . import paths
+from .i18n import t
 from .jobs import Job, JobQueue
 from .make import MODES
 from .watch import VIDEO_EXT
@@ -57,7 +58,7 @@ progress{width:100%}small,.mut{color:var(--mut)}a{color:var(--acc)}.row{display:
 <div id="jobs"></div>
 <script>
 const $=id=>document.getElementById(id);
-const L=(navigator.language||'en').startsWith('ru')?'ru':'en';
+const L='__L__'=='auto'?((navigator.language||'en').startsWith('ru')?'ru':'en'):'__L__';
 const S={en:{t:'Video variants',lv:'Variants',go:'Send',pick:'Choose a video',ok:'Accepted, working',err:'Error: ',net:'No connection',
  queued:'queued',running:'working',done:'done',failed:'failed',light:'light: small crop, speed, tone',dust:'dust: light plus fine pixel changes',
  operator:'operator: slow camera drift',meta:'meta only: picture and sound unchanged',n:'variants: ',all:'Download all (zip)',
@@ -113,8 +114,8 @@ def _cleanup_old(data: Path) -> None:
             shutil.rmtree(d, ignore_errors=True)
 
 
-def make_handler(pin: str | None, queue: JobQueue, data: Path, default_count: int, default_mode: str, port: int):
-    """`pin=None` means local-only: no login, but Host and Origin must be this machine."""
+def make_handler(pin: str | None, queue: JobQueue, data: Path, default_count: int, default_mode: str, port: int, lang: str = "auto"):
+    """`pin=None` means local-only: no login, but Host and Origin must be this machine. `lang` is ru, en or auto (the browser decides)."""
     token = secrets.token_hex(16)
     local_hosts = {f"127.0.0.1:{port}", f"localhost:{port}", f"[::1]:{port}"}
     pin_gate = threading.Lock()
@@ -172,7 +173,7 @@ def make_handler(pin: str | None, queue: JobQueue, data: Path, default_count: in
                 return self._send(200, LOGIN.encode()) if pin else self._send(403, b"forbidden", "text/plain")
             if path == "/":
                 options = "".join(f'<option value="{m}"></option>' for m in MODES)
-                html = PAGE.replace("__N__", str(default_count)).replace("__P__", default_mode).replace("__MODES__", options)
+                html = PAGE.replace("__N__", str(default_count)).replace("__P__", default_mode).replace("__L__", lang).replace("__MODES__", options)
                 return self._send(200, html.encode())
             if path == "/jobs":
                 js = sorted(queue.jobs.values(), key=lambda j: j.created, reverse=True)
@@ -271,7 +272,9 @@ def _lan_address() -> str | None:
         return None
 
 
-def serve(host: str, port: int, pin: str | None, count: int, mode: str, open_browser: bool = True) -> int:
+def serve(host: str, port: int, pin: str | None, count: int, mode: str, open_browser: bool = True,
+          lang: str = "en", page_lang: str = "auto") -> int:
+    """`lang` is the language of this console, `page_lang` of the page (ru, en or auto)."""
     local = host in LOOPBACK
     pin = None if local else (pin or f"{secrets.randbelow(10**6):06d}")
     data = paths.data_dir() / "web"
@@ -284,16 +287,16 @@ def serve(host: str, port: int, pin: str | None, count: int, mode: str, open_bro
     queue = JobQueue(on_done=drop_source)
     httpd = (_Server6 if ":" in host else ThreadingHTTPServer)((host, port), None)
     port = httpd.server_address[1]
-    httpd.RequestHandlerClass = make_handler(pin, queue, data, max(1, min(8, count)), mode, port)
+    httpd.RequestHandlerClass = make_handler(pin, queue, data, max(1, min(8, count)), mode, port, page_lang)
     where = ("[::1]" if host == "::1" else "127.0.0.1") if local else (_lan_address() or "<this computer address>")
     url = f"http://{where}:{port}"
-    print(f"open {url}" + ("" if local else f"   PIN: {pin}") + "\nCtrl+C to stop", flush=True)
+    print(t(lang, "open", url=url) + ("" if local else "   " + t(lang, "pin", pin=pin)) + "\n" + t(lang, "stop"), flush=True)
     if local and open_browser:
         threading.Timer(0.5, lambda: webbrowser.open(url)).start()
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
-        print("stopped")
+        print(t(lang, "stopped"))
     finally:
         httpd.server_close()
     return 0

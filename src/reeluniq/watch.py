@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
+from .i18n import t
 from .jobs import Job, JobQueue
 
 VIDEO_EXT = {".mp4", ".mov", ".m4v"}
@@ -16,16 +17,18 @@ def _candidates(root: Path) -> list[Path]:
     return sorted(p for p in root.iterdir() if p.is_file() and p.suffix.lower() in VIDEO_EXT and not p.name.startswith("."))
 
 
-def watch(root: Path, count: int, mode: str, poll: float = 2.0, once: bool = False, log=print) -> None:
+def watch(root: Path, count: int, mode: str, poll: float = 2.0, once: bool = False, log=print,
+          out: Path | None = None, lang: str = "en") -> None:
+    """Results go to `out` (default: DIR/variants), one folder per video."""
     root = root.resolve()
     if not root.is_dir():
         raise FileNotFoundError(f"{root}: no such folder")
-    out_root = root / OUT_NAME
-    out_root.mkdir(exist_ok=True)
-    queue = JobQueue(on_done=lambda j: log(f"{j.source.name}: {j.state} ({len(j.files)} file(s))" + (f", {j.error}" if j.error else "")), echo=log)
+    out_root = out.resolve() if out else root / OUT_NAME
+    out_root.mkdir(parents=True, exist_ok=True)
+    queue = JobQueue(on_done=lambda j: log(t(lang, "job", name=j.source.name, state=t(lang, f"state_{j.state}"), n=len(j.files)) + (f", {j.error}" if j.error else "")), echo=log)
     seen: dict[Path, tuple[int, float]] = {}
     submitted: set[Path] = set()
-    log(f"watching {root}  (results: {out_root}, mode={mode}, n={count}); Ctrl+C to stop")
+    log(t(lang, "watching", root=root, out=out_root, mode=mode, count=count))
     while True:
         now = time.time()
         waiting = 0
@@ -45,7 +48,7 @@ def watch(root: Path, count: int, mode: str, poll: float = 2.0, once: bool = Fal
                 waiting -= 1
                 if size > 0:
                     submitted.add(p)
-                    log(f"queued: {p.name}")
+                    log(t(lang, "queued", name=p.name))
                     queue.submit(Job(id=p.name, source=p, out_dir=out_root / p.name, count=count, mode=mode))
         if once and not waiting and queue.pending() == 0:
             return

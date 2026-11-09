@@ -5,7 +5,7 @@ pytestmark = pytest.mark.unit
 
 @pytest.fixture
 def serve(tmp_path):
-    """serve(pin=None, queue=None) starts a server on a free port and returns the port; the fixture stops it."""
+    """serve(pin=None, queue=None, lang="auto") starts a server on a free port and returns the port; the fixture stops it."""
     import threading
     from http.server import ThreadingHTTPServer
 
@@ -14,10 +14,10 @@ def serve(tmp_path):
 
     servers = []
 
-    def start(pin=None, queue=None):
+    def start(pin=None, queue=None, lang="auto"):
         httpd = ThreadingHTTPServer(("127.0.0.1", 0), None)
         port = httpd.server_address[1]
-        httpd.RequestHandlerClass = make_handler(pin, queue or JobQueue(), tmp_path, 3, "light", port)
+        httpd.RequestHandlerClass = make_handler(pin, queue or JobQueue(), tmp_path, 3, "light", port, lang)
         threading.Thread(target=httpd.serve_forever, daemon=True).start()
         servers.append(httpd)
         return port
@@ -81,6 +81,11 @@ def test_zip_download_holds_every_variant(tmp_path, serve):
     assert status == 200 and response.getheader("Content-Type") == "application/zip"
     assert sorted(zipfile.ZipFile(BytesIO(body)).namelist()) == ["a_light_01.mp4", "a_light_02.mp4"]
     assert request(port, "GET", "/zip/ffffffffffff")[0] == 404
+
+
+def test_page_language_comes_from_the_setting(serve):
+    for lang, marker in (("ru", "const L='ru'=='auto'"), ("auto", "const L='auto'=='auto'")):
+        assert marker in request(serve(lang=lang), "GET", "/")[2].decode()
 
 
 def test_upload_is_accepted_and_the_limits_answer(serve, tmp_path, monkeypatch):

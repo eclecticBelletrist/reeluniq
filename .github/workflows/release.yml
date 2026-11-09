@@ -80,7 +80,7 @@ jobs:
           if [ "${{ matrix.ffmpeg }}" = win ]; then icon="--icon packaging/reeluniq.ico"; fi
           pyinstaller --noconfirm --onedir --console --name reeluniq $icon packaging/launcher.py
           cp vendor/ffmpeg* vendor/ffprobe* dist/reeluniq/
-          cp LICENSE packaging/THIRD-PARTY.txt dist/reeluniq/
+          cp LICENSE packaging/THIRD-PARTY.txt packaging/reeluniq.env dist/reeluniq/
           mkdir dist/reeluniq/licenses
           cp packaging/licenses/*.txt dist/reeluniq/licenses/
           python - <<'PY'

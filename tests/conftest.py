@@ -1,3 +1,4 @@
+import os
 import subprocess
 from pathlib import Path
 
@@ -17,3 +18,14 @@ def clip(tmp_path_factory) -> Path:
         check=True,
     )
     return p
+
+
+@pytest.fixture(autouse=True)
+def _isolated_settings(tmp_path, monkeypatch):
+    """A settings file or REELUNIQ_* variable on the machine running the tests must not change what they expect."""
+    for name in [n for n in os.environ if n.startswith("REELUNIQ_") and n not in ("REELUNIQ_FFMPEG", "REELUNIQ_FFPROBE")]:
+        monkeypatch.delenv(name)
+    empty = tmp_path / "empty.env"
+    empty.write_text("")
+    monkeypatch.setenv("REELUNIQ_CONFIG", str(empty))
+    monkeypatch.setenv("REELUNIQ_LANG", "en")
