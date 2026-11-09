@@ -51,6 +51,21 @@ It starts `ffmpeg` and `ffprobe` as child processes and writes the variants and 
 
 </details>
 
+## Settings
+
+Defaults (language, mode, number of variants, results folder, page address and port, PIN, opening the browser) live in a text file `reeluniq.env` and in `REELUNIQ_*` variables. A flag beats a variable, a variable beats the file, the file beats the built-in default.
+
+| Name | Values | Default |
+|---|---|---|
+| `REELUNIQ_LANG` | `auto` (follow the system), `ru`, `en`; page, console and `--help` | `auto` |
+| `REELUNIQ_MODE` | `light`, `dust`, `operator`, `meta` | `light` |
+| `REELUNIQ_COUNT` | 1 or more (the page offers up to 8 and clamps to it) | `3` |
+| `REELUNIQ_OUT` | folder for the results of `make` (inside it, `<name>_variants/`) and `watch`; the page keeps its own folder | next to the source |
+| `REELUNIQ_HOST`, `REELUNIQ_PORT`, `REELUNIQ_PIN` | as `--host`, `--port`, `--pin` of `app` | `127.0.0.1`, `8765`, random |
+| `REELUNIQ_BROWSER` | `yes` or `no`: open the page on start | `yes` |
+
+The release archives carry `reeluniq.env` next to the program with every line commented out: remove the `#` of a line and restart. From source the file is looked for in `~/.local/share/reeluniq/` (Linux), `~/Library/Application Support/reeluniq/` (macOS) or `%LOCALAPPDATA%\reeluniq\` (Windows); `REELUNIQ_CONFIG` names another file. A bad value stops the program with a message that names the setting, an unknown line with a message that names the file and the line, and a `REELUNIQ_CONFIG` that points to no file is an error. `REELUNIQ_FFMPEG` and `REELUNIQ_FFPROBE` stay variables only.
+
 Nothing leaves your machine: the program makes no network connections. With `--host 0.0.0.0` the page is reachable from your local network; it then asks for a PIN, one attempt at a time, over plain http, so use it only on a network you trust.
 
 ## Walkthrough
@@ -95,7 +110,7 @@ SSCD (`sscd_disc_mixup`, the open copy-detection model) compares frames sampled 
     pytest -m unit           # no external programs
     pytest -m integration    # needs ffmpeg and ffprobe
 
-67 tests in two groups: unit (the operator path, the page and its PIN mode, the job queue, the command line) and integration (every mode on a synthetic clip, `meta` output, the hot folder, the HDR round trip). CI runs both on Linux, Windows and macOS.
+67 tests in two groups: unit (the operator path, the page, its PIN mode and its limits, the job queue, the command line, the settings, the launcher) and integration (every mode on a synthetic clip, `meta` output, the hot folder, the HDR round trip). CI runs both on Linux, Windows and macOS.
 
 ## Design decisions and known limitations
 
